@@ -1,0 +1,144 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <title>Roblox 天空盒製作工具</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
+    <style>
+        body { font-family: sans-serif; background: #222; color: #fff; text-align: center; padding: 20px; }
+        .container { max-width: 800px; margin: auto; background: #333; padding: 20px; border-radius: 10px; }
+        .setup-section { margin-bottom: 20px; border-bottom: 1px solid #444; padding-bottom: 20px; }
+        select, input, button { padding: 10px; margin: 10px; border-radius: 5px; border: none; font-size: 16px; }
+        button { background: #007bff; color: white; cursor: pointer; transition: 0.3s; }
+        button:hover { background: #0056b3; }
+        button:disabled { background: #555; }
+        #preview-container { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; margin-top: 20px; }
+        .preview-box { background: #444; padding: 5px; border-radius: 5px; }
+        .preview-box img { width: 100%; height: auto; display: block; }
+        .preview-label { font-size: 12px; margin-top: 5px; color: #aaa; }
+        canvas { display: none; }
+    </style>
+</head>
+<body>
+
+<div class="container">
+    <h2>Roblox Skybox 製作工具</h2>
+    <p>請上傳一張 3x2 佈局的原始圖（如範例圖）</p>
+
+    <div class="setup-section">
+        <label>1. 選擇輸出的單面解析度：</label>
+        <select id="res-select">
+            <option value="1024">1024 x 1024 (推薦)</option>
+            <option value="2048">2048 x 2048 (高清)</option>
+            <option value="4096">4096 x 4096 (極高，可能導致卡頓)</option>
+        </select>
+        <br>
+        <label>2. 上傳原始圖片：</label>
+        <input type="file" id="upload-input" accept="image/*">
+    </div>
+
+    <div id="status">等待上傳...</div>
+    <button id="download-btn" disabled>下載所有 .tex 檔案 (ZIP)</button>
+
+    <div id="preview-container">
+        </div>
+</div>
+
+<script>
+    const uploadInput = document.getElementById('upload-input');
+    const resSelect = document.getElementById('res-select');
+    const downloadBtn = document.getElementById('download-btn');
+    const previewContainer = document.getElementById('preview-container');
+    const status = document.getElementById('status');
+
+    // 定義裁切順序（對應你提供的 3x2 圖片佈局）
+    // 第一排：DN, UP, LF | 第二排：BK, RT, FT
+    const layout = [
+        'sky512_dn', 'sky512_up', 'sky512_lf',
+        'sky512_bk', 'sky512_rt', 'sky512_ft'
+    ];
+
+    let generatedFiles = [];
+
+    uploadInput.addEventListener('change', function(e) {
+        const file = e.target.files[0];
+        if (!file) return;
+
+        const reader = new FileReader();
+        reader.onload = function(event) {
+            const img = new Image();
+            img.onload = function() {
+                processImage(img);
+            };
+            img.src = event.target.result;
+        };
+        reader.readAsDataURL(file);
+    });
+
+    function processImage(img) {
+        const size = parseInt(resSelect.value);
+        previewContainer.innerHTML = '';
+        generatedFiles = [];
+        status.innerText = "正在處理中...";
+
+        const canvas = document.createElement('canvas');
+        const ctx = canvas.getContext('2d');
+        canvas.width = size;
+        canvas.height = size;
+
+        // 計算原始圖每一格的寬高
+        const sourceW = img.width / 3;
+        const sourceH = img.height / 2;
+
+        layout.forEach((name, index) => {
+            const col = index % 3;
+            const row = Math.floor(index / 3);
+
+            // 裁切並重繪到設定的大小
+            ctx.clearRect(0, 0, size, size);
+            ctx.drawImage(
+                img, 
+                col * sourceW, row * sourceH, sourceW, sourceH, // 來源座標
+                0, 0, size, size // 目標大小
+            );
+
+            // 轉存為 DataURL (Roblox tex 檔案本質通常是圖像，這裡導出為 png 模擬)
+            const dataUrl = canvas.toDataURL('image/png');
+            generatedFiles.push({ name: name + '.tex', data: dataUrl });
+
+            // 建立預覽
+            const box = document.createElement('div');
+            box.className = 'preview-box';
+            const pImg = document.createElement('img');
+            pImg.src = dataUrl;
+            const label = document.createElement('div');
+            label.className = 'preview-label';
+            label.innerText = name + '.tex';
+            box.appendChild(pImg);
+            box.appendChild(label);
+            previewContainer.appendChild(box);
+        });
+
+        status.innerText = "處理完成！";
+        downloadBtn.disabled = false;
+    }
+
+    downloadBtn.addEventListener('click', function() {
+        const zip = new JSZip();
+        generatedFiles.forEach(file => {
+            // 去除 DataURL 的前綴
+            const base64Data = file.data.replace(/^data:image\/(png|jpg);base64,/, "");
+            zip.file(file.name, base64Data, {base64: true});
+        });
+
+        zip.generateAsync({type: "blob"}).then(function(content) {
+            const link = document.createElement('a');
+            link.href = URL.createObjectURL(content);
+            link.download = "skybox_pack.zip";
+            link.click();
+        });
+    });
+</script>
+
+</body>
+</html>
